@@ -29,15 +29,34 @@ TOTAL_NEWS_MIN = 7
 TOTAL_NEWS_MAX = 10
 DESTAQUES = 3
 
+BR_SOURCES = [
+    "g1.globo.com",
+    "folha.uol.com.br",
+    "uol.com.br",
+    "estadao.com.br",
+    "cnnbrasil.com.br",
+    "infomoney.com.br",
+    "poder360.com.br",
+    "agenciabrasil.ebc.com.br",
+]
+
+GLOBAL_SOURCES = [
+    "reuters.com",
+    "apnews.com",
+    "bbc.com",
+    "bloomberg.com",
+]
+
+# (query, lista de domínios permitidos)
 TOPICS = [
-    "política Brasil",
-    "economia Brasil",
-    "mercado financeiro Brasil",
-    "causas sociais Brasil",
-    "mudanças climáticas",
-    "geopolítica conflitos armados crises internacionais eleições",
-    "mercado de tecnologia inteligência artificial",
-    "mercado de PMEs pequenas e médias empresas Brasil",
+    ("política Brasil", BR_SOURCES),
+    ("economia Brasil", BR_SOURCES),
+    ("mercado financeiro Brasil", BR_SOURCES),
+    ("causas sociais Brasil", BR_SOURCES),
+    ("mudanças climáticas", BR_SOURCES + GLOBAL_SOURCES),
+    ("geopolítica conflitos armados crises internacionais eleições", BR_SOURCES + GLOBAL_SOURCES),
+    ("mercado de tecnologia inteligência artificial", BR_SOURCES + GLOBAL_SOURCES),
+    ("mercado de PMEs pequenas e médias empresas Brasil", BR_SOURCES),
 ]
 
 NOME_USUARIO = "Samuel"
@@ -95,16 +114,17 @@ def save_state(state):
 
 # ---------- Tavily ----------
 
-def tavily_search_topic(topic):
+def tavily_search_topic(query, domains):
     url = "https://api.tavily.com/search"
     headers = {"Authorization": f"Bearer {TAVILY_API_KEY}", "Content-Type": "application/json"}
     payload = {
-        "query": topic,
+        "query": query,
         "topic": "news",
         "days": 2,
-        "max_results": 5,
-        "search_depth": "basic",
+        "max_results": 6,
+        "search_depth": "advanced",
         "include_answer": False,
+        "include_domains": domains,
     }
     resp = requests.post(url, headers=headers, json=payload, timeout=30)
     resp.raise_for_status()
@@ -115,11 +135,11 @@ def tavily_search_topic(topic):
 def collect_candidates(already_sent_urls):
     candidates = []
     seen_urls = set()
-    for topic in TOPICS:
+    for query, domains in TOPICS:
         try:
-            results = with_retries(tavily_search_topic, "Tavily", topic)
+            results = with_retries(tavily_search_topic, "Tavily", query, domains)
         except RuntimeError as e:
-            raise RuntimeError(f"Tavily ({topic}): {e}")
+            raise RuntimeError(f"Tavily ({query}): {e}")
 
         for r in results:
             article_url = r.get("url")
@@ -128,7 +148,7 @@ def collect_candidates(already_sent_urls):
             seen_urls.add(article_url)
             content = (r.get("content") or "")[:700]
             candidates.append({
-                "topic": topic,
+                "topic": query,
                 "title": r.get("title", "")[:200],
                 "url": article_url,
                 "content": content,
